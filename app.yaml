@@ -1,7 +1,6 @@
-runtime: go
-api_version: go1.9
+runtime: go112
 service: slackpost
 
 handlers:
 - url: /.*
-  script: _go_app
+  script: auto

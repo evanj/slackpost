@@ -5,18 +5,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
-
-	"google.golang.org/appengine/urlfetch"
-
-	"google.golang.org/appengine"
 )
 
 type slackClient struct {
-	httpClient *http.Client
-	token      string
+	token string
 }
 
 type slackResponseMetadata struct {
@@ -26,6 +23,7 @@ type slackUser struct {
 	ID      string `json:"id"`
 	Profile struct {
 		DisplayName string `json:"display_name"`
+		RealName    string `json:"real_name"`
 	} `json:"profile"`
 }
 type slackUserList struct {
@@ -54,7 +52,7 @@ func (s *slackClient) callAndUnmarshal(method string, arguments url.Values, outp
 	}
 	req.Header.Set("Authorization", "Bearer "+s.token)
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -88,7 +86,7 @@ func findUserID(client *slackClient, displayName string) (string, error) {
 	}
 
 	for _, user := range userList.Members {
-		if user.Profile.DisplayName == displayName {
+		if user.Profile.DisplayName == displayName || user.Profile.RealName == displayName {
 			return user.ID, nil
 		}
 	}
@@ -122,9 +120,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	ctx := appengine.NewContext(r)
-	urlfetchClient := urlfetch.Client(ctx)
-	client := &slackClient{urlfetchClient, parsedRequest.Token}
+	client := &slackClient{parsedRequest.Token}
 
 	userID, err := findUserID(client, parsedRequest.DisplayName)
 	if err != nil {
@@ -150,8 +146,14 @@ func handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+		log.Printf("Defaulting to port %s", port)
+	}
 
 	http.HandleFunc("/", handle)
-	appengine.Main()
 
+	log.Printf("Listening on port %s", port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 }
